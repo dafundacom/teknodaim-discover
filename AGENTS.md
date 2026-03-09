@@ -12,8 +12,10 @@
     - [Imports](#imports)
     - [Naming Conventions](#naming-conventions)
   - [Astro Conventions](#astro-conventions)
+  - [Svelte 5 Conventions](#svelte-5-conventions)
   - [Architecture Notes](#architecture-notes)
   - [Error Handling](#error-handling)
+  - [Environment Variables](#environment-variables)
   - [Docs Search](#docs-search)
 <!--toc:end-->
 
@@ -110,6 +112,15 @@ src/
 - Server output mode — no static pre-rendering unless explicitly marked
 - `experimental.clientPrerender = true` is enabled
 
+## Svelte 5 Conventions
+
+- Use Svelte 5 runes: `$props()`, `$state()`, `$derived()`, `$effect()`
+- Component props pattern: `let { prop1, prop2 }: Props = $props()`
+- Use `$bindable()` for two-way binding
+- Use `{@render children()}` for slots instead of `<slot />`
+- Module-level exports use `<script lang="ts" module>` block
+- Style components with tailwind-variants when complex variants needed
+
 ## Architecture Notes
 
 - **Components**: Astro for page-level and layout components, Svelte for
@@ -118,12 +129,22 @@ src/
 - **UI**: please use shadcn-svelte/ui components where possible, and create new ones in @/components/ui so they can be reused across the app. For non-UI components, put them in @/components. reference: https://www.shadcn-svelte.com/llms.txt
 - **Caching**: Redis (`src/lib/redis.ts`) for GraphQL responses and view
   buffering
+- **Logging**: Use pino logger from `@/lib/logger` for server-side logging
 
 ## Error Handling
 
 - Never swallow errors silently; surface them as typed responses or throw
 - Prefer type-safe patterns; avoid casting with `as` unless absolutely
   necessary and comment why
+- Use `better-result` library for type-safe error handling with `Result<T, E>`
+  pattern instead of throwing exceptions
+- Return `Err` for expected failures, throw only for unexpected/programmer errors
+
+## Environment Variables
+
+- Access via `@/lib/env` which provides typed exports: `databaseUrl`, `redisUrl`, `redisKeyPrefix`
+- Never access `process.env` or `import.meta.env` directly in application code
+- Add new env vars to `src/lib/env.ts` with appropriate typing
 
 ## Docs Search
 
