@@ -6,10 +6,10 @@ import { toast } from "svelte-sonner"
 let { slug }: { slug: string } = $props()
 
 let loading = $state(false)
-let saved = $state(savedSlugsStore.get().has(slug))
+let saved = $state(false)
 
 $effect(() => {
-  return savedSlugsStore.subscribe((set) => {
+  return savedSlugsStore.subscribe((set: Set<string>) => {
     saved = set.has(slug)
   })
 })

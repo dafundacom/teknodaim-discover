@@ -29,8 +29,8 @@ export interface ArticleCardData {
     href?: string
   } = $props()
 
-  let user: ClientUser | null = $state(userStore.get())
-  let articleSaved = $state(savedSlugsStore.get().has(article.slug))
+  let user: ClientUser | null = $state(null)
+  let articleSaved = $state(false)
   let saving = $state(false)
 
   $effect(() => {
@@ -45,9 +45,7 @@ export interface ArticleCardData {
     })
   })
 
-  async function handleSaveClick(e: MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation()
+  async function handleSaveClick() {
     if (saving) return
     saving = true
     const result = await toggleSave(article.slug)
@@ -75,14 +73,13 @@ export interface ArticleCardData {
   const link = $derived(href ?? `/article/${article.slug}`)
 </script>
 
-<a
-  class="group relative block rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-accent/50"
-  href={link}
+<div
+  class="group relative rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-accent/50"
 >
   {#if user}
     <button
       type="button"
-      class="absolute right-3 top-3 rounded-md p-1 transition-colors hover:bg-accent {articleSaved
+      class="absolute right-3 top-3 z-10 rounded-md p-1 transition-colors hover:bg-accent {articleSaved
         ? 'text-primary'
         : 'text-muted-foreground/0 group-hover:text-muted-foreground'}"
       title={articleSaved ? "Remove from library" : "Save to library"}
@@ -105,52 +102,54 @@ export interface ArticleCardData {
       </svg>
     </button>
   {/if}
-  <div class="flex gap-4">
-    {#if article.thumbnailUrl}
-      <div class="hidden shrink-0 sm:block">
-        <img
-          src={article.thumbnailUrl}
-          alt=""
-          class="h-24 w-36 rounded-lg object-cover"
-          loading="lazy"
-        />
-      </div>
-    {/if}
+  <a class="block" href={link}>
+    <div class="flex gap-4">
+      {#if article.thumbnailUrl}
+        <div class="hidden shrink-0 sm:block">
+          <img
+            src={article.thumbnailUrl}
+            alt=""
+            class="h-24 w-36 rounded-lg object-cover"
+            loading="lazy"
+          />
+        </div>
+      {/if}
 
-    <div class="min-w-0 flex-1">
-      <h3
-        class="line-clamp-2 text-base font-semibold leading-snug text-foreground group-hover:text-primary"
-      >
-        {article.title}
-      </h3>
+      <div class="min-w-0 flex-1">
+        <h3
+          class="line-clamp-2 text-base font-semibold leading-snug text-foreground group-hover:text-primary"
+        >
+          {article.title}
+        </h3>
 
-      <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
-        {article.summary}
-      </p>
+        <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
+          {article.summary}
+        </p>
 
-      <div class="mt-3 flex flex-wrap items-center gap-2">
-        {#if article.categories?.length}
-          {#each article.categories.slice(0, 3) as cat}
-            <Badge variant="secondary" class="text-xs">
-              {cat.name}
-            </Badge>
-          {/each}
-        {/if}
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          {#if article.categories?.length}
+            {#each article.categories.slice(0, 3) as cat}
+              <Badge variant="secondary" class="text-xs">
+                {cat.name}
+              </Badge>
+            {/each}
+          {/if}
 
-        <span class="text-xs text-muted-foreground">
-          {article.sourceCount} sources
-        </span>
-
-        <span class="text-xs text-muted-foreground">
-          {article.readingTimeMinutes} min read
-        </span>
-
-        {#if article.publishedAt}
           <span class="text-xs text-muted-foreground">
-            {timeAgo()}
+            {article.sourceCount} sources
           </span>
-        {/if}
+
+          <span class="text-xs text-muted-foreground">
+            {article.readingTimeMinutes} min read
+          </span>
+
+          {#if article.publishedAt}
+            <span class="text-xs text-muted-foreground">
+              {timeAgo()}
+            </span>
+          {/if}
+        </div>
       </div>
     </div>
-  </div>
-</a>
+  </a>
+</div>

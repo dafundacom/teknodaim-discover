@@ -15,10 +15,12 @@
     "fix": "bun run format:write && bun run lint:fix",
     "typecheck": "astro check && svelte-check",
     "db:migrate": "bun run drizzle-kit migrate",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:studio": "bun run drizzle-kit studio"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.41",
+    "@astrojs/node": "^9.5.4",
     "@astrojs/svelte": "^7.2.5",
     "@aws-sdk/client-s3": "^3.1005.0",
     "@lucide/astro": "^0.577.0",

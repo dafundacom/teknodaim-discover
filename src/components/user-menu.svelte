@@ -20,7 +20,13 @@ $effect(() => {
 })
 
 async function handleSignIn() {
-  await authClient.signIn.social({ provider: "google" })
+  const result = await authClient.signIn.social({
+    provider: "google",
+    callbackURL: "/",
+  })
+  if (result.data?.url) {
+    window.location.href = result.data.url
+  }
 }
 
 async function handleSignOut() {

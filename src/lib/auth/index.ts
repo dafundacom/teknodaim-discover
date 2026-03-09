@@ -25,7 +25,7 @@ export const auth = betterAuth({
     google: {
       clientId: publicGoogleClientId,
       clientSecret: googleClientSecret,
-      redirectURI: `${authUrl}/api/auth/callback/google/`,
+      redirectURI: `${authUrl}/api/auth/callback/google`,
     },
   },
   plugins: [

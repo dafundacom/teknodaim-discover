@@ -13,7 +13,9 @@ let {
   selectedCategory?: string
 } = $props()
 
-userStore.set(user ?? null)
-initSavedSlugs(savedSlugs)
-selectedCategoryStore.set(selectedCategory)
+$effect(() => {
+  userStore.set(user ?? null)
+  initSavedSlugs(savedSlugs)
+  selectedCategoryStore.set(selectedCategory)
+})
 </script>

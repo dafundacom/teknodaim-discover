@@ -14,14 +14,19 @@ let {
   pageSize?: number
 } = $props()
 
-let articles = $state<ArticleCardData[]>(initialArticles)
-let total = $state(initialTotal)
+let articles = $state<ArticleCardData[]>([])
+let total = $state(0)
 let page = $state(1)
 let loading = $state(false)
 let category = $state(selectedCategoryStore.get())
 
 $effect(() => {
-  return selectedCategoryStore.subscribe((value) => {
+  articles = initialArticles
+  total = initialTotal
+})
+
+$effect(() => {
+  return selectedCategoryStore.subscribe((value: string) => {
     category = value
   })
 })

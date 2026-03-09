@@ -54,9 +54,12 @@ if (user) return Astro.redirect("/")
   btn?.addEventListener("click", async () => {
     btn.setAttribute("disabled", "true")
     btn.textContent = "Redirecting..."
-    await authClient.signIn.social({
+    const result = await authClient.signIn.social({
       provider: "google",
       callbackURL: "/",
     })
+    if (result.data?.url) {
+      window.location.href = result.data.url
+    }
   })
 </script>
