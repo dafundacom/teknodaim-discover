@@ -6,7 +6,7 @@
   },
   "aliases": {
     "components": "@/components",
-    "utils": "@/lib/utils/style.ts",
+    "utils": "@/lib/utils/style",
     "ui": "@/components/ui",
     "hooks": "@/lib/hooks",
     "lib": "@/lib"
