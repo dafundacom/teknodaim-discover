@@ -1,38 +1,23 @@
-import {
-  index,
-  integer,
-  pgTable,
-  serial,
-  timestamp,
-  varchar,
-} from "drizzle-orm/pg-core"
+import { pgTable, timestamp, varchar } from "drizzle-orm/pg-core"
+import { createInsertSchema, createUpdateSchema } from "drizzle-zod"
+import { createCustomId } from "@/lib/utils/custom-id"
 
-export const postViews = pgTable(
-  "post_views",
-  {
-    id: serial("id").primaryKey(),
-    uri: varchar("uri", { length: 500 }).notNull(),
-    viewedAt: timestamp("viewed_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    ipHash: varchar("ip_hash", { length: 64 }).notNull(),
-    userAgentHash: varchar("user_agent_hash", { length: 64 }).notNull(),
-    fingerprint: varchar("fingerprint", { length: 64 }),
-    sessionId: varchar("session_id", { length: 64 }),
-  },
-  (table) => ({
-    uriIdx: index("uri_idx").on(table.uri),
-    viewedAtIdx: index("viewed_at_idx").on(table.viewedAt),
-  }),
-)
-
-export const viewAggregates = pgTable("view_aggregates", {
-  uri: varchar("uri", { length: 500 }).primaryKey(),
-  totalViews: integer("total_views").notNull().default(0),
-  views24h: integer("views_24h").notNull().default(0),
-  views7d: integer("views_7d").notNull().default(0),
-  views30d: integer("views_30d").notNull().default(0),
-  lastUpdated: timestamp("last_updated", { withTimezone: true })
+export const articleViewsTable = pgTable("article_views", {
+  id: varchar()
+    .primaryKey()
+    .$defaultFn(() => createCustomId()),
+  articleId: varchar("articleId").notNull(),
+  viewedAt: timestamp("viewed_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  ipHash: varchar("ip_hash", { length: 64 }).notNull(),
+  userAgentHash: varchar("user_agent_hash", { length: 64 }).notNull(),
+  fingerprint: varchar("fingerprint", { length: 64 }),
+  sessionId: varchar("session_id", { length: 64 }),
 })
+
+export const insertArticleViewSchema = createInsertSchema(articleViewsTable)
+export const updateArticleViewSchema = createUpdateSchema(articleViewsTable)
+
+export type SelectArticleView = typeof articleViewsTable.$inferSelect
+export type InsertArticleView = typeof articleViewsTable.$inferInsert
