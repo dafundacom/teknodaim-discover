@@ -1,0 +1,78 @@
+---
+import AdminTable from "@/components/admin/admin-table.svelte"
+import ClusterForm from "@/components/admin/cluster-form.svelte"
+import AdminLayout from "@/layouts/admin-layout.astro"
+import { db } from "@/lib/db/client"
+import { clustersTable } from "@/lib/db/schemas"
+import { asc } from "drizzle-orm"
+
+const clusters = await db.query.clustersTable.findMany({
+  orderBy: [asc(clustersTable.topic)],
+})
+---
+
+<AdminLayout title="Clusters — Admin">
+  <div class="space-y-8">
+    <div>
+      <h2 class="text-2xl font-bold tracking-tight">Topic Clusters</h2>
+      <p class="text-muted-foreground">
+        Define topic clusters and configure AI models for article summarization.
+      </p>
+    </div>
+
+    <div class="grid gap-8 lg:grid-cols-3">
+      <div class="lg:col-span-2">
+        <AdminTable
+          columns={[
+            { key: "topic", label: "Topic", sortable: true },
+            { key: "keywords", label: "Keywords" },
+            { key: "aiModel", label: "AI Model" },
+          ]}
+          rows={clusters}
+          actions={[
+            {
+              label: "Edit",
+              onClick: async (row) => {
+                const res = await fetch(`/api/admin/clusters/${row.id}`)
+                if (!res.ok) return
+                const cluster = await res.json()
+
+                const form = document.getElementById("cluster-form")
+                if (form) {
+                  form.scrollIntoView({ behavior: "smooth" })
+                  form.dispatchEvent(
+                    new CustomEvent("loadCluster", { detail: cluster }),
+                  )
+                }
+              },
+            },
+            {
+              label: "Delete",
+              variant: "destructive",
+              onClick: async (row) => {
+                if (!confirm(`Delete cluster "${row.topic}"?`)) return
+                const res = await fetch("/api/admin/clusters", {
+                  method: "DELETE",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: row.id }),
+                })
+                if (res.ok) window.location.reload()
+              },
+            },
+          ]}
+          emptyMessage="No clusters created yet."
+          client:load
+        />
+      </div>
+
+      <div>
+        <div id="cluster-form">
+          <ClusterForm
+            onSuccess={() => window.location.reload()}
+            client:load
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+</AdminLayout>

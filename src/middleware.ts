@@ -1,8 +1,16 @@
 import { defineMiddleware, sequence } from "astro:middleware"
 import { auth } from "@/lib/auth"
-import { initScheduler } from "@/lib/pipeline/scheduler"
 
-void initScheduler()
+async function initSchedulerSafe(): Promise<void> {
+  try {
+    const { initScheduler } = await import("@/lib/pipeline/scheduler")
+    await initScheduler()
+  } catch (e) {
+    console.error("Failed to initialize scheduler:", e)
+  }
+}
+
+void initSchedulerSafe()
 
 const sessionMiddleware = defineMiddleware(async (context, next) => {
   const session = await auth.api.getSession({

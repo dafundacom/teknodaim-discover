@@ -9,6 +9,7 @@ import {
   articlesTable,
   categoriesTable,
   citationsTable,
+  clustersTable,
   feedItemsTable,
 } from "@/lib/db/schemas"
 import { logger } from "@/lib/logger"
@@ -21,11 +22,36 @@ import { PipelineError } from "./errors"
 import { ingestAllFeeds } from "./feed-ingestion"
 import { clusterByTopic } from "./topic-clustering"
 
+const DEFAULT_AI_MODEL = "gpt-4o-mini"
+const VALID_AI_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"] as const
+
+type AIModel = (typeof VALID_AI_MODELS)[number]
+
 interface PipelineResult {
   feedsProcessed: number
   clustersFound: number
   articlesCreated: number
   errors: string[]
+}
+
+async function getModelForCluster(topic: string): Promise<string> {
+  try {
+    const cluster = await db.query.clustersTable.findFirst({
+      where: eq(clustersTable.topic, topic),
+      columns: { aiModel: true },
+    })
+
+    if (
+      cluster?.aiModel &&
+      VALID_AI_MODELS.includes(cluster.aiModel as AIModel)
+    ) {
+      return cluster.aiModel
+    }
+  } catch {
+    // Fallback to default on error
+  }
+
+  return DEFAULT_AI_MODEL
 }
 
 function ensureCategory(slug: string): Promise<Result<string, PipelineError>> {
@@ -253,7 +279,8 @@ export function runPipeline(): Promise<Result<PipelineResult, PipelineError>> {
     logger.info(`Pipeline: Processing ${clusters.length} clusters...`)
 
     for (const cluster of clusters) {
-      const summaryResult = await summarizeCluster(cluster)
+      const model = await getModelForCluster(cluster.topic)
+      const summaryResult = await summarizeCluster(cluster, model)
       if (R.isError(summaryResult)) {
         result.errors.push(
           `Summary failed for "${cluster.topic}": ${summaryResult.error.message}`,
