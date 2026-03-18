@@ -83,7 +83,10 @@ class R2Storage {
 
     this.client = new S3Client(clientConfig)
     this.bucketName = config.bucketName
-    this.publicUrl = config.publicUrl
+    // Ensure publicUrl has protocol
+    this.publicUrl = config.publicUrl.startsWith("http")
+      ? config.publicUrl
+      : `https://${config.publicUrl}`
   }
 
   uploadImage(

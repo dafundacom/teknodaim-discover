@@ -26,6 +26,10 @@ export const cfAccountId =
 export const r2AccessKey =
   process.env.R2_ACCESS_KEY ?? import.meta.env.R2_ACCESS_KEY
 export const r2Bucket = process.env.R2_BUCKET ?? import.meta.env.R2_BUCKET
-export const r2Domain = process.env.R2_DOMAIN ?? import.meta.env.R2_DOMAIN
+const rawR2Domain = process.env.R2_DOMAIN ?? import.meta.env.R2_DOMAIN
+export const r2Domain =
+  rawR2Domain && !rawR2Domain.startsWith("http")
+    ? `https://${rawR2Domain}`
+    : rawR2Domain
 export const r2SecretKey =
   process.env.R2_SECRET_KEY ?? import.meta.env.R2_SECRET_KEY

@@ -13,6 +13,7 @@ export interface ArticleCardData {
 
 <script lang="ts">
   import Badge from "@/components/ui/badge/badge.svelte"
+  import { normalizeImageUrl } from "@/lib/utils/image-url"
   import {
     savedSlugsStore,
     toggleSave,
@@ -59,6 +60,8 @@ export interface ArticleCardData {
     saving = false
   }
 
+  const normalizedThumbnailUrl = $derived(normalizeImageUrl(article.thumbnailUrl))
+
   const timeAgo = $derived(() => {
     if (!article.publishedAt) return ""
     const diff = Date.now() - new Date(article.publishedAt).getTime()
@@ -104,10 +107,10 @@ export interface ArticleCardData {
   {/if}
   <a class="block" href={link}>
     <div class="flex gap-4">
-      {#if article.thumbnailUrl}
+      {#if normalizedThumbnailUrl}
         <div class="hidden shrink-0 sm:block">
           <img
-            src={article.thumbnailUrl}
+            src={normalizedThumbnailUrl}
             alt=""
             class="h-24 w-36 rounded-lg object-cover"
             loading="lazy"

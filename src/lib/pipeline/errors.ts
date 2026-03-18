@@ -27,6 +27,11 @@ export class PipelineError extends TaggedError("PipelineError")<{
   cause?: unknown
 }>() {}
 
+export class ImageUploadError extends TaggedError("ImageUploadError")<{
+  message: string
+  cause?: unknown
+}>() {}
+
 export class SchedulerError extends TaggedError("SchedulerError")<{
   message: string
   cause?: unknown

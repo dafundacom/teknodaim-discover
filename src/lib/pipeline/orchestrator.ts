@@ -20,6 +20,7 @@ import type { ExtractedCitation } from "./citation-extractor"
 import { extractCitationsFromCluster } from "./citation-extractor"
 import { PipelineError } from "./errors"
 import { ingestAllFeeds } from "./feed-ingestion"
+import { processSectionImages } from "./image-upload"
 import { clusterByTopic } from "./topic-clustering"
 
 const DEFAULT_AI_MODEL = "gpt-4o-mini"
@@ -132,17 +133,36 @@ function storeArticle(
     )
 
     if (summary.sections.length > 0) {
+      logger.info(
+        { articleId: article.id, sectionCount: summary.sections.length },
+        "Processing section images...",
+      )
+
+      // Process images in each section body
+      const processedSections = await Promise.all(
+        summary.sections.map(async (section, i) => {
+          const { processedBody, uploadedCount, failedCount } =
+            await processSectionImages(section.body)
+
+          if (uploadedCount > 0 || failedCount > 0) {
+            logger.info(
+              { sectionIndex: i, uploadedCount, failedCount },
+              "Section image processing complete",
+            )
+          }
+
+          return {
+            articleId: article.id,
+            heading: section.heading,
+            body: processedBody,
+            sortOrder: i,
+          }
+        }),
+      )
+
       yield* R.await(
         R.tryPromise({
-          try: () =>
-            db.insert(articleSectionsTable).values(
-              summary.sections.map((section, i) => ({
-                articleId: article.id,
-                heading: section.heading,
-                body: section.body,
-                sortOrder: i,
-              })),
-            ),
+          try: () => db.insert(articleSectionsTable).values(processedSections),
           catch: (e) =>
             new PipelineError({
               message: `Failed to insert sections for "${summary.title}"`,

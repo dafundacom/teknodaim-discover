@@ -20,6 +20,7 @@ import {
 } from "@/lib/db/schemas"
 import type { SelectArticleSection } from "@/lib/db/schemas/article-sections"
 import { logger } from "@/lib/logger"
+import { normalizeImageUrl } from "@/lib/utils/image-url"
 
 const { slug } = Astro.params
 if (!slug) return Astro.redirect("/")
@@ -30,8 +31,10 @@ const article = await db.query.articlesTable.findFirst({
 
 if (!article) return Astro.redirect("/")
 
-if (article.thumbnailUrl && !article.thumbnailAssetId) {
-  const url = new URL(article.thumbnailUrl, Astro.url.origin)
+const normalizedThumbnailUrl = normalizeImageUrl(article.thumbnailUrl)
+
+if (normalizedThumbnailUrl && !article.thumbnailAssetId) {
+  const url = new URL(normalizedThumbnailUrl, Astro.url.origin)
   const filename = url.pathname.split("/").pop() ?? "thumbnail"
   db.insert(assetsTable)
     .values({
@@ -39,7 +42,7 @@ if (article.thumbnailUrl && !article.thumbnailAssetId) {
       originalName: filename,
       type: "images",
       size: 0,
-      url: article.thumbnailUrl,
+      url: normalizedThumbnailUrl,
     })
     .returning({ id: assetsTable.id })
     .then(([row]) => {
@@ -177,9 +180,9 @@ const articleUrl = `${Astro.url.origin}/article/${slug}`
         </p>
       </div>
 
-      {article.thumbnailUrl && (
+      {normalizedThumbnailUrl && (
         <img
-          src={article.thumbnailUrl}
+          src={normalizedThumbnailUrl}
           alt=""
           class="mb-8 aspect-video w-full rounded-xl object-cover"
           loading="eager"
