@@ -1,4 +1,5 @@
 <script lang="ts">
+import { Image } from "@unpic/svelte"
 import { authClient } from "@/lib/auth/client"
 import { userStore } from "@/stores/user"
 import { Button } from "@/components/ui/button"
@@ -39,9 +40,12 @@ async function handleSignOut() {
   <DropdownMenu>
     <DropdownMenuTrigger>
       {#if user.image}
-        <img
+        <Image
           src={user.image}
           alt={user.name ?? "User"}
+          layout="fixed"
+          width={32}
+          height={32}
           class="size-8 rounded-full"
           referrerpolicy="no-referrer"
         />

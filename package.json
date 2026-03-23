@@ -30,6 +30,7 @@
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/svelte-form": "^1.28.5",
     "@tanstack/svelte-query": "^6.1.1",
+    "@unpic/svelte": "^1.0.1",
     "ai": "^6.0.116",
     "astro": "^6.0.6",
     "better-auth": "^1.5.5",

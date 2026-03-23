@@ -14,6 +14,7 @@ export interface ArticleCardData {
 <script lang="ts">
   import Badge from "@/components/ui/badge/badge.svelte"
   import { normalizeImageUrl } from "@/lib/utils/image-url"
+  import { Image } from "@unpic/svelte"
   import {
     savedSlugsStore,
     toggleSave,
@@ -109,9 +110,12 @@ export interface ArticleCardData {
     <div class="flex gap-4">
       {#if normalizedThumbnailUrl}
         <div class="hidden shrink-0 sm:block">
-          <img
+          <Image
             src={normalizedThumbnailUrl}
             alt=""
+            layout="fixed"
+            width={144}
+            height={96}
             class="h-24 w-36 rounded-lg object-cover"
             loading="lazy"
           />
