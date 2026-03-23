@@ -1,5 +1,5 @@
 ---
-import AdminTable from "@/components/admin/admin-table.svelte"
+import ClustersManager from "@/components/admin/clusters-manager.svelte"
 import ClusterForm from "@/components/admin/cluster-form.svelte"
 import AdminLayout from "@/layouts/admin-layout.astro"
 import { db } from "@/lib/db/client"
@@ -22,47 +22,7 @@ const clusters = await db.query.clustersTable.findMany({
 
     <div class="grid gap-8 lg:grid-cols-3">
       <div class="lg:col-span-2">
-        <AdminTable
-          columns={[
-            { key: "topic", label: "Topic", sortable: true },
-            { key: "keywords", label: "Keywords" },
-            { key: "aiModel", label: "AI Model" },
-          ]}
-          rows={clusters}
-          actions={[
-            {
-              label: "Edit",
-              onClick: async (row) => {
-                const res = await fetch(`/api/admin/clusters/${row.id}`)
-                if (!res.ok) return
-                const cluster = await res.json()
-
-                const form = document.getElementById("cluster-form")
-                if (form) {
-                  form.scrollIntoView({ behavior: "smooth" })
-                  form.dispatchEvent(
-                    new CustomEvent("loadCluster", { detail: cluster }),
-                  )
-                }
-              },
-            },
-            {
-              label: "Delete",
-              variant: "destructive",
-              onClick: async (row) => {
-                if (!confirm(`Delete cluster "${row.topic}"?`)) return
-                const res = await fetch("/api/admin/clusters", {
-                  method: "DELETE",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: row.id }),
-                })
-                if (res.ok) window.location.reload()
-              },
-            },
-          ]}
-          emptyMessage="No clusters created yet."
-          client:load
-        />
+        <ClustersManager {clusters} client:load />
       </div>
 
       <div>

@@ -1,23 +1,21 @@
 <script lang="ts" module>
-export interface ColumnDef<T = Record<string, unknown>> {
-  key: string
+export interface ColumnDef<T> {
+  key: keyof T & string
   label: string
   sortable?: boolean
   render?: (row: T) => string
 }
 
-export interface AdminTableAction<T = Record<string, unknown>> {
+export interface AdminTableAction<T> {
   label: string
   variant?: "default" | "destructive"
-  onClick: (row: T) => void
+  onClick: (row: T) => void | Promise<void>
 }
 </script>
 
-<script lang="ts">
+<script lang="ts" generics="T">
   import Button from "@/components/ui/button/button.svelte"
   import * as Table from "@/components/ui/table"
-
-  type T = Record<string, unknown>
 
   let {
     columns,
@@ -31,10 +29,10 @@ export interface AdminTableAction<T = Record<string, unknown>> {
     emptyMessage?: string
   } = $props()
 
-  let sortKey = $state("")
+  let sortKey = $state<keyof T | "">("")
   let sortDir = $state<"asc" | "desc">("asc")
 
-  function handleSort(key: string) {
+  function handleSort(key: keyof T) {
     if (sortKey === key) {
       sortDir = sortDir === "asc" ? "desc" : "asc"
     } else {
@@ -46,8 +44,8 @@ export interface AdminTableAction<T = Record<string, unknown>> {
   const sortedRows = $derived(() => {
     if (!sortKey) return rows
     return [...rows].sort((a, b) => {
-      const aVal = String(a[sortKey] ?? "")
-      const bVal = String(b[sortKey] ?? "")
+      const aVal = String(a[sortKey as keyof T] ?? "")
+      const bVal = String(b[sortKey as keyof T] ?? "")
       const cmp = aVal.localeCompare(bVal)
       return sortDir === "asc" ? cmp : -cmp
     })

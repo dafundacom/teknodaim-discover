@@ -1,5 +1,5 @@
 ---
-import AdminTable from "@/components/admin/admin-table.svelte"
+import CategoriesManager from "@/components/admin/categories-manager.svelte"
 import CategoryForm from "@/components/admin/category-form.svelte"
 import AdminLayout from "@/layouts/admin-layout.astro"
 import { db } from "@/lib/db/client"
@@ -39,30 +39,7 @@ const categories = categoriesRaw.map((c) => ({
 
     <div class="grid gap-8 lg:grid-cols-3">
       <div class="lg:col-span-2">
-        <AdminTable
-          columns={[
-            { key: "name", label: "Name", sortable: true },
-            { key: "slug", label: "Slug" },
-            { key: "articleCount", label: "Articles", sortable: true },
-          ]}
-          rows={categories}
-          actions={[
-            {
-              label: "Delete",
-              variant: "destructive",
-              onClick: async (row) => {
-                if (!confirm(`Delete category "${row.name}"?`)) return
-                const res = await fetch(
-                  `/api/admin/categories/${row.id}`,
-                  { method: "DELETE" },
-                )
-                if (res.ok) window.location.reload()
-              },
-            },
-          ]}
-          emptyMessage="No categories created yet."
-          client:load
-        />
+        <CategoriesManager {categories} client:load />
       </div>
 
       <div>

@@ -1,5 +1,5 @@
 ---
-import AdminTable from "@/components/admin/admin-table.svelte"
+import FeedsManager from "@/components/admin/feeds-manager.svelte"
 import FeedForm from "@/components/admin/feed-form.svelte"
 import AdminLayout from "@/layouts/admin-layout.astro"
 import { db } from "@/lib/db/client"
@@ -23,34 +23,7 @@ const feeds = await db
 
     <div class="grid gap-8 lg:grid-cols-3">
       <div class="lg:col-span-2">
-        <AdminTable
-          columns={[
-            { key: "name", label: "Name", sortable: true },
-            { key: "url", label: "URL" },
-            {
-              key: "enabled",
-              label: "Status",
-              render: (row) =>
-                row.enabled ? "Active" : "Disabled",
-            },
-          ]}
-          rows={feeds}
-          actions={[
-            {
-              label: "Delete",
-              variant: "destructive",
-              onClick: async (row) => {
-                if (!confirm("Delete this feed source?")) return
-                const res = await fetch(`/api/admin/feeds/${row.id}`, {
-                  method: "DELETE",
-                })
-                if (res.ok) window.location.reload()
-              },
-            },
-          ]}
-          emptyMessage="No feed sources configured yet."
-          client:load
-        />
+        <FeedsManager {feeds} client:load />
       </div>
 
       <div>
