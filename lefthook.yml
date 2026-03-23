@@ -1,11 +1,9 @@
 pre-commit:
   commands:
     lint:
-      run: bun run lint
-    typecheck:
-      run: bun run typecheck
+      run: biome lint --fix {staged_files}
     format:
-      run: bun run format:check
+      run: biome format --write {staged_files}
 
 pre-push:
   commands:

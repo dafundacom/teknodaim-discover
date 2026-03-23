@@ -27,6 +27,7 @@
       "**/*.mjs",
       "**/*.jsx",
       "**/*.json",
+      "**/*.yaml",
       "!src/lib/db/migrations/",
       "!src/lib/db/migrations/meta/*.json"
     ]
@@ -43,6 +44,7 @@
       "**/*.mjs",
       "**/*.jsx",
       "**/*.json",
+      "**/*.yaml",
       "!src/env.d.ts",
       "!src/lib/db/migrations/",
       "!src/lib/db/migrations/meta/*.json"
