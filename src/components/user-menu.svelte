@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { toast } from "svelte-sonner"
 
 let user = $state(userStore.get())
 let isOnAdminPage = $state(false)
@@ -41,6 +42,30 @@ async function handleSignIn() {
 async function handleSignOut() {
   await authClient.signOut()
   window.location.href = "/"
+}
+
+async function handleRunPipeline() {
+  try {
+    const res = await fetch("/api/internal/pipeline/run", {
+      method: "POST",
+    })
+    const data = await res.json()
+
+    if (res.ok) {
+      const r = data.result
+      toast.success("Pipeline completed", {
+        description: `${r.articlesCreated} articles created from ${r.clustersFound} clusters. ${r.errors?.length ?? 0} errors.`,
+      })
+    } else {
+      toast.error("Pipeline failed", {
+        description: data.error ?? "Unknown error",
+      })
+    }
+  } catch {
+    toast.error("Network error", {
+      description: "Check server logs",
+    })
+  }
 }
 </script>
 
@@ -85,10 +110,8 @@ async function handleSignOut() {
       <ThemeToggle />
       {#if user.role === "admin"}
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <a href="/api/internal/pipeline/run" class="w-full">
-            Run Pipeline
-          </a>
+        <DropdownMenuItem onclick={handleRunPipeline}>
+          Run Pipeline
         </DropdownMenuItem>
       {/if}
       <DropdownMenuSeparator />
