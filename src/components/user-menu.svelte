@@ -14,11 +14,18 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 let user = $state(userStore.get())
+let isOnAdminPage = $state(false)
 
 $effect(() => {
   return userStore.subscribe((u) => {
     user = u
   })
+})
+
+$effect(() => {
+  isOnAdminPage =
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/admin")
 })
 
 async function handleSignIn() {
@@ -69,6 +76,11 @@ async function handleSignOut() {
       <DropdownMenuItem>
         <a href="/library" class="w-full">My Library</a>
       </DropdownMenuItem>
+      {#if user?.role === "admin" && !isOnAdminPage}
+        <DropdownMenuItem>
+          <a href="/admin" class="w-full">Admin</a>
+        </DropdownMenuItem>
+      {/if}
       <DropdownMenuSeparator />
       <ThemeToggle />
       {#if user.role === "admin"}
