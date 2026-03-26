@@ -29,6 +29,7 @@ openspec/
 opencode.jsonc
 .github/prompts/
 .github/skills/
+docs/
 
 # others
 tmp/

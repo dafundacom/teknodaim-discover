@@ -28,7 +28,9 @@ const articleSchema = z.object({
     .array(
       z.object({
         heading: z.string().describe("Section heading"),
-        body: z.string().describe("Section content in markdown format"),
+        body: z
+          .string()
+          .describe("Section content as clean HTML (no markdown)"),
       }),
     )
     .describe("Article body broken into logical sections"),
@@ -77,7 +79,7 @@ export function summarizeCluster(
             prompt: `You are a journalist writing for a news discovery platform similar to Perplexity.
 Synthesize the following ${cluster.items.length} source articles into a single comprehensive article.
 Write in a clear, professional tone. Include all key facts and perspectives.
-Use markdown formatting in section bodies.
+Use semantic HTML tags in section bodies: <p> for paragraphs, <strong> for emphasis, <ul>/<li> for lists, <h3> for subheadings. Do NOT use markdown.
 
 Topic: ${cluster.topic}
 Keywords: ${cluster.keywords.slice(0, 10).join(", ")}
@@ -99,8 +101,11 @@ ${sourceTexts}`,
     )
 
     const content = object.sections
-      .map((s) => `## ${s.heading}\n\n${s.body}`)
-      .join("\n\n")
+      .map(
+        (s) =>
+          `<section class="article-section"><h2>${s.heading}</h2>${s.body}</section>`,
+      )
+      .join("\n")
 
     const fullText = `${object.summary}\n\n${content}`
 

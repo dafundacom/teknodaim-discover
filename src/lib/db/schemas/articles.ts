@@ -27,6 +27,7 @@ export const articlesTable = pgTable(
     ),
     sourceCount: integer("source_count").notNull().default(0),
     readingTimeMinutes: integer("reading_time_minutes").notNull().default(1),
+    contentFingerprint: text("content_fingerprint"),
     publishedAt: timestamp("published_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -38,6 +39,7 @@ export const articlesTable = pgTable(
     index("article_slug_idx").on(table.slug),
     index("article_status_idx").on(table.status),
     index("article_published_idx").on(table.publishedAt),
+    index("article_content_fingerprint_idx").on(table.contentFingerprint),
   ],
 )
 

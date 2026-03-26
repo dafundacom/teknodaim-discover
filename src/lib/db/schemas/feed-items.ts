@@ -33,6 +33,7 @@ export const feedItemsTable = pgTable(
       .notNull()
       .default("pending"),
     errorMessage: text("error_message"),
+    normalizedUrl: text("normalized_url"),
     fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
     processedAt: timestamp("processed_at"),
   },
@@ -41,6 +42,7 @@ export const feedItemsTable = pgTable(
     index("feed_item_status_idx").on(table.status),
     index("feed_item_guid_idx").on(table.guid),
     index("feed_item_published_idx").on(table.publishedAt),
+    index("feed_item_normalized_url_idx").on(table.normalizedUrl),
   ],
 )
 

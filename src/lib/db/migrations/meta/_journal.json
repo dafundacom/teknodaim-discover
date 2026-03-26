@@ -50,6 +50,13 @@
       "when": 1773969567276,
       "tag": "0006_dizzy_the_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1774498831265,
+      "tag": "0007_confused_mongu",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ import { summarizeCluster } from "./ai-summarizer"
 import { scrapeArticle } from "./article-scraper"
 import type { ExtractedCitation } from "./citation-extractor"
 import { extractCitationsFromCluster } from "./citation-extractor"
+import { normalizeAndCheckUrl } from "./dedup/service"
 import { PipelineError } from "./errors"
 import { ingestAllFeeds } from "./feed-ingestion"
 import { processSectionImages } from "./image-upload"
@@ -105,6 +106,7 @@ function storeArticle(
   citations: ExtractedCitation[],
   sourceUrls: string[],
   thumbnail?: ThumbnailInfo,
+  contentFingerprint?: string,
 ): Promise<Result<void, PipelineError>> {
   return R.gen(async function* () {
     const [article] = yield* R.await(
@@ -120,6 +122,7 @@ function storeArticle(
               status: "published",
               sourceCount: citations.length,
               readingTimeMinutes: summary.readingTimeMinutes,
+              contentFingerprint: contentFingerprint ?? null,
               publishedAt: new Date(),
               thumbnailUrl: thumbnail?.url ?? null,
               thumbnailAssetId: thumbnail?.assetId ?? null,
@@ -270,8 +273,61 @@ export function runPipeline(): Promise<Result<PipelineResult, PipelineError>> {
 
     logger.info("Pipeline: Scraping articles for context...")
     const thumbnailsByLink = new Map<string, ThumbnailInfo>()
+    const normalizedUrls = new Map<string, string>()
+
     for (const item of pendingItems) {
-      if (!item.link) continue
+      if (!item.link) {
+        await R.tryPromise({
+          try: () =>
+            db
+              .update(feedItemsTable)
+              .set({ status: "skipped" })
+              .where(eq(feedItemsTable.id, item.id)),
+          catch: (e) =>
+            new PipelineError({
+              message: `Failed to mark item ${item.id} as skipped`,
+              cause: e,
+            }),
+        })
+        continue
+      }
+
+      const normalizedResult = normalizeAndCheckUrl(item.link)
+      if (R.isError(normalizedResult)) {
+        logger.warn(
+          `Failed to normalize URL for item ${item.id}: ${normalizedResult.error.message}`,
+        )
+        continue
+      }
+
+      const normalizedUrl = normalizedResult.value
+      normalizedUrls.set(item.id, normalizedUrl)
+
+      const existingItem = await db.query.feedItemsTable.findFirst({
+        where: eq(feedItemsTable.normalizedUrl, normalizedUrl),
+        columns: { id: true },
+      })
+
+      if (existingItem && existingItem.id !== item.id) {
+        logger.info(
+          { itemId: item.id, normalizedUrl },
+          "Duplicate URL detected, skipping",
+        )
+        await R.tryPromise({
+          try: () =>
+            db
+              .update(feedItemsTable)
+              .set({ status: "skipped", normalizedUrl })
+              .where(eq(feedItemsTable.id, item.id)),
+          catch: (e) =>
+            new PipelineError({
+              message: `Failed to mark item ${item.id} as skipped`,
+              cause: e,
+            }),
+        })
+        continue
+      }
+
       const scraped = await scrapeArticle(item.link)
       if (R.isOk(scraped)) {
         if (scraped.value.thumbnailUrl) {
@@ -284,7 +340,7 @@ export function runPipeline(): Promise<Result<PipelineResult, PipelineError>> {
           try: () =>
             db
               .update(feedItemsTable)
-              .set({ status: "processing" })
+              .set({ status: "processing", normalizedUrl })
               .where(eq(feedItemsTable.id, item.id)),
           catch: (e) =>
             new PipelineError({
@@ -323,11 +379,42 @@ export function runPipeline(): Promise<Result<PipelineResult, PipelineError>> {
 
       const sourceUrls = citations.map((c) => c.url)
 
+      const { checkContentDuplicate } = await import("./dedup/service")
+      const dedupCheck = await checkContentDuplicate(
+        summaryResult.value.content,
+      )
+
+      if (dedupCheck.isDuplicate) {
+        logger.info(
+          { topic: cluster.topic, matchScore: dedupCheck.matchScore },
+          "Content duplicate detected, skipping cluster",
+        )
+        for (const item of cluster.items) {
+          await R.tryPromise({
+            try: () =>
+              db
+                .update(feedItemsTable)
+                .set({
+                  status: "skipped",
+                  errorMessage: `Content duplicate (match score: ${dedupCheck.matchScore?.toFixed(2)})`,
+                })
+                .where(eq(feedItemsTable.id, item.id)),
+            catch: (e) =>
+              new PipelineError({
+                message: `Failed to mark item ${item.id} as skipped`,
+                cause: e,
+              }),
+          })
+        }
+        continue
+      }
+
       const storeResult = await storeArticle(
         summaryResult.value,
         citations,
         sourceUrls,
         thumbnail,
+        dedupCheck.fingerprint,
       )
 
       if (storeResult.isErr()) {

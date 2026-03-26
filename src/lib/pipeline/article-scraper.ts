@@ -2,8 +2,10 @@ import { Readability } from "@mozilla/readability"
 import type { Result } from "better-result"
 import { Result as R } from "better-result"
 import { JSDOM } from "jsdom"
+import { cleanArticleContent } from "./dedup/service"
 import { ArticleScrapeError } from "./errors"
 import { uploadImageToR2 } from "./image-upload"
+import { stealthFetch } from "./scraper/stealth-fetch"
 
 export interface ScrapedArticle {
   title: string
@@ -41,13 +43,7 @@ export function scrapeArticle(
   return R.gen(async function* () {
     const response = yield* R.await(
       R.tryPromise({
-        try: () =>
-          fetch(url, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (compatible; DiscoverBot/1.0; +https://discover.app)",
-            },
-          }),
+        try: () => stealthFetch(url),
         catch: (e) =>
           new ArticleScrapeError({
             message: `Failed to fetch ${url}`,
@@ -101,11 +97,14 @@ export function scrapeArticle(
       thumbnailAssetId = uploaded.assetId
     }
 
+    const textContent = cleanArticleContent(article.textContent ?? "")
+    const excerpt = cleanArticleContent(article.excerpt ?? "")
+
     return R.ok({
       title: article.title ?? "Untitled",
       content: article.content ?? "",
-      textContent: article.textContent ?? "",
-      excerpt: article.excerpt ?? "",
+      textContent,
+      excerpt,
       thumbnailUrl,
       thumbnailAssetId,
       siteName: article.siteName ?? null,
