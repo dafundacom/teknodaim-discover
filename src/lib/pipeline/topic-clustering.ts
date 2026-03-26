@@ -91,10 +91,15 @@ function computeSimilarity(kwA: string[], kwB: string[]): number {
   return union.size > 0 ? intersection.length / union.size : 0
 }
 
+function getUniqueSourceCount(items: SelectFeedItem[]): number {
+  return new Set(items.map((item) => item.feedSourceId)).size
+}
+
 export function clusterByTopic(
   items: SelectFeedItem[],
   similarityThreshold = 0.15,
   timeWindowHours = 72,
+  minUniqueSources = 2,
 ): TopicCluster[] {
   const now = Date.now()
   const cutoff = now - timeWindowHours * 60 * 60 * 1000
@@ -136,7 +141,10 @@ export function clusterByTopic(
       }
     }
 
-    if (cluster.items.length >= 2) {
+    const hasEnoughSources =
+      getUniqueSourceCount(cluster.items) >= minUniqueSources
+
+    if (cluster.items.length >= minUniqueSources && hasEnoughSources) {
       clusters.push(cluster)
     }
   }

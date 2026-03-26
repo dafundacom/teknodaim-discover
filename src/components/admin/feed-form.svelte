@@ -9,6 +9,7 @@ import { z } from "zod"
 let {
   feed = null,
   onSuccess,
+  onCancel,
 }: {
   feed?: {
     id: string
@@ -17,6 +18,7 @@ let {
     enabled: boolean
   } | null
   onSuccess?: () => void
+  onCancel?: () => void
 } = $props()
 
 const feedSchema = z.object({
@@ -144,6 +146,11 @@ $effect(() => {
   </form.Field>
 
   <div class="flex gap-2">
+    {#if onCancel}
+      <Button type="button" variant="outline" onclick={onCancel}>
+        Cancel
+      </Button>
+    {/if}
     <Button type="submit" disabled={form.state.isSubmitting}>
       {#if form.state.isSubmitting}
         Saving...
