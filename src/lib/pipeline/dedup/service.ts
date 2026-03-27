@@ -51,7 +51,7 @@ export async function checkContentDuplicate(
   }
 
   const recentArticles = await db.query.articlesTable.findMany({
-    where: sql`${articlesTable.publishedAt} > ${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()}`,
+    where: sql`${articlesTable.publishedAt} > NOW() - INTERVAL '7 days'`,
     columns: { id: true, contentFingerprint: true, title: true },
   })
 
