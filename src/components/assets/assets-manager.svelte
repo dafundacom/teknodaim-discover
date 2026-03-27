@@ -146,4 +146,5 @@ function handlePreview(asset: Asset) {
 <AssetPreviewDialog
   bind:open={previewDialogOpen}
   asset={selectedAsset}
+  onDelete={handleDeleteRequest}
 />

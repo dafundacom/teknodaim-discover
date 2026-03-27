@@ -1,5 +1,6 @@
 <script lang="ts">
 import * as Card from "@/components/ui/card"
+import Progress from "@/components/ui/progress.svelte"
 import { formatFileSize } from "@/lib/utils/assets"
 
 let {
@@ -11,8 +12,6 @@ let {
   size: number
   progress: number
 } = $props()
-
-const progressWidth = $derived(`${progress}%`)
 </script>
 
 <Card.Root>
@@ -24,11 +23,6 @@ const progressWidth = $derived(`${progress}%`)
       </div>
       <span class="text-sm font-medium">{progress}%</span>
     </div>
-    <div class="bg-muted h-2 w-full overflow-hidden rounded-full">
-      <div
-        class="bg-primary h-full transition-all duration-300"
-        style="width: {progressWidth}"
-      ></div>
-    </div>
+    <Progress value={progress} />
   </Card.Content>
 </Card.Root>

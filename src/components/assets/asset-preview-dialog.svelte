@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Download } from "@lucide/svelte"
+import { Download, Trash2 } from "@lucide/svelte"
 import * as Dialog from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { formatFileSize } from "@/lib/utils/assets"
@@ -8,9 +8,11 @@ import type { Asset } from "@/types/asset"
 let {
   open = $bindable(false),
   asset,
+  onDelete,
 }: {
   open?: boolean
   asset: Asset | null
+  onDelete?: (asset: Asset) => void
 } = $props()
 
 function formatDate(date: Date | null): string {
@@ -27,6 +29,13 @@ function formatDate(date: Date | null): string {
 function handleDownload() {
   if (asset?.url) {
     window.open(asset.url, "_blank")
+  }
+}
+
+function handleDelete() {
+  if (asset && onDelete) {
+    onDelete(asset)
+    open = false
   }
 }
 </script>
@@ -64,11 +73,17 @@ function handleDownload() {
             </div>
           </div>
         </div>
-        <Dialog.Footer>
+        <Dialog.Footer class="gap-2">
           <Button variant="outline" onclick={handleDownload}>
             <Download class="mr-2 size-4" />
             Download
           </Button>
+          {#if onDelete}
+            <Button variant="destructive" onclick={handleDelete}>
+              <Trash2 class="mr-2 size-4" />
+              Delete
+            </Button>
+          {/if}
         </Dialog.Footer>
       {/if}
     </Dialog.Content>
