@@ -1,6 +1,15 @@
+import { Result, TaggedError } from "better-result"
+
 import { logger } from "@/lib/logger"
 import { CookieJar } from "./cookie-jar"
 import { getRandomUserAgent } from "./user-agents"
+
+export class StealthFetchError extends TaggedError("StealthFetchError")<{
+  message: string
+  cause?: unknown
+  url: string
+  status?: number
+}>() {}
 
 interface StealthConfig {
   minDelayMs: number
@@ -52,7 +61,7 @@ interface StealthFetchOptions {
 export async function stealthFetch(
   url: string,
   options: StealthFetchOptions = {},
-): Promise<Response> {
+): Promise<Result<Response, StealthFetchError>> {
   const config = { ...DEFAULT_CONFIG, ...options.config }
   const domain = getDomainFromUrl(url)
   const cookieJar = getCookieJar(domain)
@@ -90,54 +99,78 @@ export async function stealthFetch(
     },
   }
 
-  let lastError: Error | null = null
+  let lastError: StealthFetchError | null = null
 
   for (let attempt = 0; attempt < config.maxRetries; attempt++) {
-    try {
-      logger.debug({ url, attempt: attempt + 1 }, "Stealth fetch attempt")
+    const attemptResult = await Result.tryPromise<Response, StealthFetchError>({
+      try: async () => {
+        logger.debug({ url, attempt: attempt + 1 }, "Stealth fetch attempt")
 
-      const response = await fetch(url, fetchOptions)
+        const response = await fetch(url, fetchOptions)
 
-      cookieJar.setCookiesFromHeaders(domain, response.headers)
+        cookieJar.setCookiesFromHeaders(domain, response.headers)
 
-      if (response.status === 429 || response.status === 503) {
-        const retryAfter = response.headers.get("Retry-After")
-        const waitMs = retryAfter
-          ? parseInt(retryAfter, 10) * 1000
-          : 2 ** attempt * 1000
+        if (response.status === 429 || response.status === 503) {
+          const retryAfter = response.headers.get("Retry-After")
+          const waitMs = retryAfter
+            ? Number.parseInt(retryAfter, 10) * 1000
+            : 2 ** attempt * 1000
 
-        logger.warn(
-          { url, status: response.status, waitMs },
-          "Rate limited, backing off",
-        )
-        await sleep(waitMs)
-        continue
-      }
+          logger.warn(
+            { url, status: response.status, waitMs },
+            "Rate limited, backing off",
+          )
+          await sleep(waitMs)
+          throw new StealthFetchError({
+            message: `Rate limited (${response.status}), will retry`,
+            url,
+            status: response.status,
+          })
+        }
 
-      if (response.headers.get("cf-mitigated") === "challenge") {
-        logger.warn({ url }, "Cloudflare challenge detected")
-        throw new Error(
-          "Cloudflare challenge detected - manual intervention needed",
-        )
-      }
+        if (response.headers.get("cf-mitigated") === "challenge") {
+          logger.warn({ url }, "Cloudflare challenge detected")
+          throw new StealthFetchError({
+            message:
+              "Cloudflare challenge detected - manual intervention needed",
+            url,
+            status: 403,
+          })
+        }
 
-      return response
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      logger.warn(
-        { url, attempt: attempt + 1, error: lastError.message },
-        "Fetch failed",
-      )
+        return response
+      },
+      catch: (e) =>
+        e instanceof StealthFetchError
+          ? e
+          : new StealthFetchError({
+              message: `Fetch failed: ${e instanceof Error ? e.message : String(e)}`,
+              cause: e,
+              url,
+            }),
+    })
 
-      if (attempt < config.maxRetries - 1) {
-        const backoffMs = 2 ** attempt * 1000
-        await sleep(backoffMs)
-      }
+    if (Result.isOk(attemptResult)) {
+      return Result.ok(attemptResult.value)
+    }
+
+    lastError = attemptResult.error
+    logger.warn(
+      { url, attempt: attempt + 1, error: attemptResult.error.message },
+      "Fetch failed",
+    )
+
+    if (attempt < config.maxRetries - 1) {
+      const backoffMs = 2 ** attempt * 1000
+      await sleep(backoffMs)
     }
   }
 
-  throw (
+  return Result.err(
     lastError ??
-    new Error(`Failed to fetch ${url} after ${config.maxRetries} attempts`)
+      new StealthFetchError({
+        message: `Failed to fetch ${url} after ${config.maxRetries} attempts`,
+        url,
+      }),
   )
 }

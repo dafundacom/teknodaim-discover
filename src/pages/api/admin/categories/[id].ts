@@ -1,5 +1,7 @@
 import type { APIRoute } from "astro"
+import { Result } from "better-result"
 import { eq } from "drizzle-orm"
+
 import { isAdmin } from "@/lib/auth/is-admin"
 import { createRedisCache } from "@/lib/cache"
 import { db } from "@/lib/db/client"
@@ -40,33 +42,57 @@ export const PATCH: APIRoute = async ({ params, locals, request }) => {
 
   const cache = createRedisCache()
 
-  try {
-    const body = await request.json()
-    const { name, slug, description, color, iconUrl } = body
+  const bodyResult = await Result.tryPromise({
+    try: () => request.json(),
+    catch: () => new Error("Failed to parse request body"),
+  })
 
-    const updates: Record<string, unknown> = { updatedAt: new Date() }
-    if (name !== undefined) updates.name = name
-    if (slug !== undefined) updates.slug = slug
-    if (description !== undefined) updates.description = description
-    if (color !== undefined) updates.color = color
-    if (iconUrl !== undefined) updates.iconUrl = iconUrl
-
-    const [updated] = await db
-      .update(categoriesTable)
-      .set(updates)
-      .where(eq(categoriesTable.id, id))
-      .returning()
-
-    if (!updated) {
-      return Response.json({ error: "Not found" }, { status: 404 })
-    }
-
-    await cache.deleteCache("categories:all")
-
-    return Response.json(updated)
-  } finally {
+  if (Result.isError(bodyResult)) {
     await cache.close()
+    return Response.json({ error: "Invalid request body" }, { status: 400 })
   }
+
+  const body = bodyResult.value
+  const updates: Record<string, unknown> = { updatedAt: new Date() }
+
+  if (body.name !== undefined) updates.name = body.name
+  if (body.slug !== undefined) updates.slug = body.slug
+  if (body.description !== undefined) updates.description = body.description
+  if (body.color !== undefined) updates.color = body.color
+  if (body.iconUrl !== undefined) updates.iconUrl = body.iconUrl
+
+  const updateResult = await Result.tryPromise({
+    try: async () => {
+      const [updated] = await db
+        .update(categoriesTable)
+        .set(updates)
+        .where(eq(categoriesTable.id, id))
+        .returning()
+      return updated
+    },
+    catch: (e) =>
+      new Error(
+        `Failed to update category: ${e instanceof Error ? e.message : "Unknown error"}`,
+      ),
+  })
+
+  await cache.close()
+
+  if (Result.isError(updateResult)) {
+    console.error("Category update error:", updateResult.error)
+    return Response.json(
+      { error: "Failed to update category" },
+      { status: 500 },
+    )
+  }
+
+  if (!updateResult.value) {
+    return Response.json({ error: "Not found" }, { status: 404 })
+  }
+
+  await cache.deleteCache("categories:all")
+
+  return Response.json(updateResult.value)
 }
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
@@ -81,20 +107,35 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
 
   const cache = createRedisCache()
 
-  try {
-    const [deleted] = await db
-      .delete(categoriesTable)
-      .where(eq(categoriesTable.id, id))
-      .returning({ id: categoriesTable.id })
+  const deleteResult = await Result.tryPromise({
+    try: async () => {
+      const [deleted] = await db
+        .delete(categoriesTable)
+        .where(eq(categoriesTable.id, id))
+        .returning({ id: categoriesTable.id })
+      return deleted
+    },
+    catch: (e) =>
+      new Error(
+        `Failed to delete category: ${e instanceof Error ? e.message : "Unknown error"}`,
+      ),
+  })
 
-    if (!deleted) {
-      return Response.json({ error: "Not found" }, { status: 404 })
-    }
+  await cache.close()
 
-    await cache.deleteCache("categories:all")
-
-    return Response.json({ success: true })
-  } finally {
-    await cache.close()
+  if (Result.isError(deleteResult)) {
+    console.error("Category delete error:", deleteResult.error)
+    return Response.json(
+      { error: "Failed to delete category" },
+      { status: 500 },
+    )
   }
+
+  if (!deleteResult.value) {
+    return Response.json({ error: "Not found" }, { status: 404 })
+  }
+
+  await cache.deleteCache("categories:all")
+
+  return Response.json({ success: true })
 }

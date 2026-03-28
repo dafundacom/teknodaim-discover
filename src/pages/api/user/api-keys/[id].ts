@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro"
+import { Result } from "better-result"
 import { z } from "zod"
 
 import {
@@ -34,87 +35,28 @@ export const PATCH: APIRoute = async (context) => {
     })
   }
 
-  try {
-    const body = await context.request.json()
+  const bodyResult = await Result.tryPromise({
+    try: () => context.request.json(),
+    catch: () => new Error("Failed to parse request body"),
+  })
 
-    if ("name" in body) {
-      const { name } = renameSchema.parse(body)
-
-      const key = await getApiKeyById(keyId)
-      if (!key) {
-        return new Response(JSON.stringify({ error: "Key not found" }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-
-      if (key.userId !== user.id) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-
-      const updatedKey = await renameApiKey(keyId, user.id, name)
-
-      return new Response(
-        JSON.stringify({
-          id: updatedKey?.id,
-          name: updatedKey?.name,
-          isActive: updatedKey?.isActive,
-          createdAt: updatedKey?.createdAt,
-          lastUsedAt: updatedKey?.lastUsedAt,
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      )
-    }
-
-    if ("isActive" in body) {
-      const { isActive } = statusSchema.parse(body)
-
-      const key = await getApiKeyById(keyId)
-      if (!key) {
-        return new Response(JSON.stringify({ error: "Key not found" }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-
-      if (key.userId !== user.id) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-
-      const updatedKey = await toggleApiKeyStatus(keyId, user.id, isActive)
-
-      return new Response(
-        JSON.stringify({
-          id: updatedKey?.id,
-          name: updatedKey?.name,
-          isActive: updatedKey?.isActive,
-          createdAt: updatedKey?.createdAt,
-          lastUsedAt: updatedKey?.lastUsedAt,
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      )
-    }
-
+  if (Result.isError(bodyResult)) {
     return new Response(JSON.stringify({ error: "Invalid request body" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+  }
+
+  const body = bodyResult.value
+
+  if ("name" in body) {
+    const parsed = renameSchema.safeParse(body)
+    if (!parsed.success) {
       return new Response(
-        JSON.stringify({ error: "Invalid request", details: error.issues }),
+        JSON.stringify({
+          error: "Invalid request",
+          details: parsed.error.issues,
+        }),
         {
           status: 400,
           headers: { "Content-Type": "application/json" },
@@ -122,12 +64,137 @@ export const PATCH: APIRoute = async (context) => {
       )
     }
 
-    console.error("Error updating API key:", error)
-    return new Response(JSON.stringify({ error: "Failed to update API key" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
+    const keyResult = await Result.tryPromise({
+      try: () => getApiKeyById(keyId),
+      catch: () => new Error("Database error"),
     })
+
+    if (Result.isError(keyResult) || !keyResult.value) {
+      return new Response(JSON.stringify({ error: "Key not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    const key = keyResult.value
+
+    if (key.userId !== user.id) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    const updatedResult = await Result.tryPromise({
+      try: () => renameApiKey(keyId, user.id, parsed.data.name),
+      catch: (e) =>
+        new Error(
+          `Failed to rename key: ${e instanceof Error ? e.message : "Unknown error"}`,
+        ),
+    })
+
+    if (Result.isError(updatedResult)) {
+      return new Response(
+        JSON.stringify({ error: updatedResult.error.message }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
+      )
+    }
+
+    const updatedKey = updatedResult.value
+
+    return new Response(
+      JSON.stringify({
+        id: updatedKey?.id,
+        name: updatedKey?.name,
+        isActive: updatedKey?.isActive,
+        createdAt: updatedKey?.createdAt,
+        lastUsedAt: updatedKey?.lastUsedAt,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    )
   }
+
+  if ("isActive" in body) {
+    const parsed = statusSchema.safeParse(body)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid request",
+          details: parsed.error.issues,
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      )
+    }
+
+    const keyResult = await Result.tryPromise({
+      try: () => getApiKeyById(keyId),
+      catch: () => new Error("Database error"),
+    })
+
+    if (Result.isError(keyResult) || !keyResult.value) {
+      return new Response(JSON.stringify({ error: "Key not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    const key = keyResult.value
+
+    if (key.userId !== user.id) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    const updatedResult = await Result.tryPromise({
+      try: () => toggleApiKeyStatus(keyId, user.id, parsed.data.isActive),
+      catch: (e) =>
+        new Error(
+          `Failed to update key status: ${e instanceof Error ? e.message : "Unknown error"}`,
+        ),
+    })
+
+    if (Result.isError(updatedResult)) {
+      return new Response(
+        JSON.stringify({ error: updatedResult.error.message }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        },
+      )
+    }
+
+    const updatedKey = updatedResult.value
+
+    return new Response(
+      JSON.stringify({
+        id: updatedKey?.id,
+        name: updatedKey?.name,
+        isActive: updatedKey?.isActive,
+        createdAt: updatedKey?.createdAt,
+        lastUsedAt: updatedKey?.lastUsedAt,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    )
+  }
+
+  return new Response(JSON.stringify({ error: "Invalid request body" }), {
+    status: 400,
+    headers: { "Content-Type": "application/json" },
+  })
 }
 
 export const DELETE: APIRoute = async (context) => {
@@ -148,40 +215,54 @@ export const DELETE: APIRoute = async (context) => {
     })
   }
 
-  try {
-    const key = await getApiKeyById(keyId)
-    if (!key) {
-      return new Response(JSON.stringify({ error: "Key not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
+  const keyResult = await Result.tryPromise({
+    try: () => getApiKeyById(keyId),
+    catch: () => new Error("Database error"),
+  })
 
-    if (key.userId !== user.id) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-
-    const deleted = await deleteApiKeyByUserId(keyId, user.id)
-
-    if (!deleted) {
-      return new Response(JSON.stringify({ error: "Key not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
+  if (Result.isError(keyResult) || !keyResult.value) {
+    return new Response(JSON.stringify({ error: "Key not found" }), {
+      status: 404,
       headers: { "Content-Type": "application/json" },
     })
-  } catch (error) {
-    console.error("Error deleting API key:", error)
+  }
+
+  const key = keyResult.value
+
+  if (key.userId !== user.id) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  const deleteResult = await Result.tryPromise({
+    try: () => deleteApiKeyByUserId(keyId, user.id),
+    catch: (e) =>
+      new Error(
+        `Failed to delete key: ${e instanceof Error ? e.message : "Unknown error"}`,
+      ),
+  })
+
+  if (Result.isError(deleteResult)) {
+    console.error("Error deleting API key:", deleteResult.error)
     return new Response(JSON.stringify({ error: "Failed to delete API key" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     })
   }
+
+  const deleted = deleteResult.value
+
+  if (!deleted) {
+    return new Response(JSON.stringify({ error: "Key not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  })
 }

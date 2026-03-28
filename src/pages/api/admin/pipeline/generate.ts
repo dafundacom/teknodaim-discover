@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro"
+import { Result } from "better-result"
 import { eq } from "drizzle-orm"
 
 import { isAdmin } from "@/lib/auth/is-admin"
@@ -12,75 +13,80 @@ export const POST: APIRoute = async ({ locals, request }) => {
     return Response.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  try {
-    const body = await request.json()
-    const { feedItemId } = body
+  const bodyResult = await Result.tryPromise({
+    try: () => request.json(),
+    catch: () => new Error("Failed to parse request body"),
+  })
 
-    if (!feedItemId) {
-      return Response.json({ error: "feedItemId is required" }, { status: 400 })
-    }
+  if (Result.isError(bodyResult)) {
+    return Response.json({ error: "Invalid request body" }, { status: 400 })
+  }
 
-    const feedItem = await db.query.feedItemsTable.findFirst({
-      where: eq(feedItemsTable.id, feedItemId),
-    })
+  const { feedItemId } = bodyResult.value
 
-    if (!feedItem) {
-      return Response.json({ error: "Feed item not found" }, { status: 404 })
-    }
+  if (!feedItemId) {
+    return Response.json({ error: "feedItemId is required" }, { status: 400 })
+  }
 
-    if (feedItem.status === "processed") {
-      return Response.json(
-        { error: "Feed item already processed" },
-        { status: 400 },
-      )
-    }
+  const feedItemResult = await Result.tryPromise({
+    try: async () =>
+      db.query.feedItemsTable.findFirst({
+        where: eq(feedItemsTable.id, feedItemId),
+      }),
+    catch: () => new Error("Database query failed"),
+  })
 
-    if (feedItem.status === "processing") {
-      return Response.json(
-        { error: "Feed item is already being processed" },
-        { status: 400 },
-      )
-    }
+  if (Result.isError(feedItemResult) || !feedItemResult.value) {
+    return Response.json({ error: "Feed item not found" }, { status: 404 })
+  }
 
-    logger.info(`Starting single item processing for: ${feedItemId}`)
+  const feedItem = feedItemResult.value
 
-    const result = await runPipelineForItems([feedItemId])
-
-    if (result.isErr()) {
-      logger.error(`Failed to process ${feedItemId}: ${result.error.message}`)
-      return Response.json(
-        { error: `Failed: ${result.error.message}` },
-        { status: 500 },
-      )
-    }
-
-    const { articleId, status } = result.value
-
-    if (status === "processed" && articleId) {
-      return Response.json({
-        success: true,
-        message: "Article generated successfully!",
-        articleId,
-      })
-    } else if (status === "skipped") {
-      return Response.json({
-        success: true,
-        message: "Item was skipped (duplicate content)",
-      })
-    } else {
-      return Response.json(
-        {
-          error: `Processing failed with status: ${status}`,
-        },
-        { status: 500 },
-      )
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error("Generate article error:", error)
+  if (feedItem.status === "processed") {
     return Response.json(
-      { error: `Failed to process: ${message}` },
+      { error: "Feed item already processed" },
+      { status: 400 },
+    )
+  }
+
+  if (feedItem.status === "processing") {
+    return Response.json(
+      { error: "Feed item is already being processed" },
+      { status: 400 },
+    )
+  }
+
+  logger.info(`Starting single item processing for: ${feedItemId}`)
+
+  const result = await runPipelineForItems([feedItemId])
+
+  if (result.isErr()) {
+    logger.error(`Failed to process ${feedItemId}: ${result.error.message}`)
+    return Response.json(
+      { error: `Failed: ${result.error.message}` },
       { status: 500 },
     )
   }
+
+  const { articleId, status } = result.value
+
+  if (status === "processed" && articleId) {
+    return Response.json({
+      success: true,
+      message: "Article generated successfully!",
+      articleId,
+    })
+  }
+
+  if (status === "skipped") {
+    return Response.json({
+      success: true,
+      message: "Item was skipped (duplicate content)",
+    })
+  }
+
+  return Response.json(
+    { error: `Processing failed with status: ${status}` },
+    { status: 500 },
+  )
 }

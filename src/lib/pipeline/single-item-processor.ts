@@ -24,81 +24,81 @@ interface SingleItemResult {
 export async function runPipelineForItems(
   feedItemIds: string[],
 ): Promise<Result<SingleItemResult, PipelineError>> {
-  try {
-    const items = await db.query.feedItemsTable.findMany({
-      where: eq(feedItemsTable.id, feedItemIds[0]),
-      with: {
-        feedSource: true,
-      },
-    })
+  const items = await db.query.feedItemsTable.findMany({
+    where: eq(feedItemsTable.id, feedItemIds[0]),
+    with: {
+      feedSource: true,
+    },
+  })
 
-    if (items.length === 0) {
-      return R.err(
-        new PipelineError({
-          message: "No items found to process",
-        }),
-      )
-    }
+  if (items.length === 0) {
+    return R.err(
+      new PipelineError({
+        message: "No items found to process",
+      }),
+    )
+  }
 
-    const item = items[0]
+  const item = items[0]
 
+  await db
+    .update(feedItemsTable)
+    .set({ status: "processing" })
+    .where(eq(feedItemsTable.id, item.id))
+
+  if (!item.link) {
     await db
       .update(feedItemsTable)
-      .set({ status: "processing" })
+      .set({ status: "skipped" })
       .where(eq(feedItemsTable.id, item.id))
+    return R.ok({ status: "skipped" })
+  }
 
-    if (!item.link) {
-      await db
-        .update(feedItemsTable)
-        .set({ status: "skipped" })
-        .where(eq(feedItemsTable.id, item.id))
-      return R.ok({ status: "skipped" })
-    }
+  const scraped = await scrapeArticle(item.link)
+  if (R.isError(scraped)) {
+    await db
+      .update(feedItemsTable)
+      .set({
+        status: "failed",
+        errorMessage: `Scrape failed: ${scraped.error.message}`,
+      })
+      .where(eq(feedItemsTable.id, item.id))
+    return R.ok({ status: "failed" })
+  }
 
-    const scraped = await scrapeArticle(item.link)
-    if (R.isError(scraped)) {
-      await db
-        .update(feedItemsTable)
-        .set({
-          status: "failed",
-          errorMessage: `Scrape failed: ${scraped.error.message}`,
-        })
-        .where(eq(feedItemsTable.id, item.id))
-      return R.ok({ status: "failed" })
-    }
+  const cluster = {
+    topic: item.title ?? "Untitled",
+    keywords: [],
+    items: [item],
+  }
 
-    const cluster = {
-      topic: item.title ?? "Untitled",
-      keywords: [],
-      items: [item],
-    }
+  const summaryResult = await summarizeCluster(cluster, "gpt-4o-mini")
+  if (R.isError(summaryResult)) {
+    await db
+      .update(feedItemsTable)
+      .set({
+        status: "failed",
+        errorMessage: `Summary failed: ${summaryResult.error.message}`,
+      })
+      .where(eq(feedItemsTable.id, item.id))
+    return R.ok({ status: "failed" })
+  }
 
-    const summaryResult = await summarizeCluster(cluster, "gpt-4o-mini")
-    if (R.isError(summaryResult)) {
-      await db
-        .update(feedItemsTable)
-        .set({
-          status: "failed",
-          errorMessage: `Summary failed: ${summaryResult.error.message}`,
-        })
-        .where(eq(feedItemsTable.id, item.id))
-      return R.ok({ status: "failed" })
-    }
+  const { checkContentDuplicate } = await import("./dedup/service")
+  const dedupCheck = await checkContentDuplicate(summaryResult.value.content)
 
-    const { checkContentDuplicate } = await import("./dedup/service")
-    const dedupCheck = await checkContentDuplicate(summaryResult.value.content)
+  if (dedupCheck.isDuplicate) {
+    await db
+      .update(feedItemsTable)
+      .set({
+        status: "skipped",
+        errorMessage: `Duplicate content (match: ${dedupCheck.matchScore?.toFixed(2)})`,
+      })
+      .where(eq(feedItemsTable.id, item.id))
+    return R.ok({ status: "skipped" })
+  }
 
-    if (dedupCheck.isDuplicate) {
-      await db
-        .update(feedItemsTable)
-        .set({
-          status: "skipped",
-          errorMessage: `Duplicate content (match: ${dedupCheck.matchScore?.toFixed(2)})`,
-        })
-        .where(eq(feedItemsTable.id, item.id))
-      return R.ok({ status: "skipped" })
-    }
-
+  try {
     const [article] = await db
       .insert(articlesTable)
       .values({

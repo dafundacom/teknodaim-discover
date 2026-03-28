@@ -2,6 +2,7 @@ import { Readability } from "@mozilla/readability"
 import type { Result } from "better-result"
 import { Result as R } from "better-result"
 import { JSDOM } from "jsdom"
+
 import { cleanArticleContent } from "./dedup/service"
 import { ArticleScrapeError } from "./errors"
 import { uploadImageToR2 } from "./image-upload"
@@ -37,77 +38,81 @@ function extractThumbnail(doc: Document, url: string): string | null {
   return null
 }
 
-export function scrapeArticle(
+export async function scrapeArticle(
   url: string,
 ): Promise<Result<ScrapedArticle, ArticleScrapeError>> {
-  return R.gen(async function* () {
-    const response = yield* R.await(
-      R.tryPromise({
-        try: () => stealthFetch(url),
-        catch: (e) =>
-          new ArticleScrapeError({
-            message: `Failed to fetch ${url}`,
-            cause: e,
-          }),
+  const fetchResult = await stealthFetch(url)
+
+  if (R.isError(fetchResult)) {
+    return R.err(
+      new ArticleScrapeError({
+        message: `Failed to fetch ${url}: ${fetchResult.error.message}`,
+        cause: fetchResult.error,
       }),
     )
+  }
 
-    if (!response.ok) {
-      return R.err(
-        new ArticleScrapeError({
-          message: `HTTP ${response.status} fetching ${url}`,
-        }),
-      )
-    }
+  const response = fetchResult.value
 
-    const html = yield* R.await(
-      R.tryPromise({
-        try: () => response.text(),
-        catch: (e) =>
-          new ArticleScrapeError({
-            message: `Failed to read response body for ${url}`,
-            cause: e,
-          }),
+  if (!response.ok) {
+    return R.err(
+      new ArticleScrapeError({
+        message: `HTTP ${response.status} fetching ${url}`,
       }),
     )
+  }
 
-    const dom = new JSDOM(html, { url })
-    const reader = new Readability(dom.window.document)
-    const article = reader.parse()
+  const htmlResult = await R.tryPromise({
+    try: () => response.text(),
+    catch: (e) =>
+      new ArticleScrapeError({
+        message: `Failed to read response body for ${url}`,
+        cause: e,
+      }),
+  })
 
-    if (!article) {
-      return R.err(
-        new ArticleScrapeError({
-          message: `Readability failed to parse ${url}`,
-        }),
-      )
-    }
+  if (R.isError(htmlResult)) {
+    return htmlResult
+  }
 
-    let thumbnailUrl = extractThumbnail(
-      new JSDOM(html, { url }).window.document,
-      url,
+  const html = htmlResult.value
+
+  const dom = new JSDOM(html, { url })
+  const reader = new Readability(dom.window.document)
+  const article = reader.parse()
+
+  if (!article) {
+    return R.err(
+      new ArticleScrapeError({
+        message: `Readability failed to parse ${url}`,
+      }),
     )
-    let thumbnailAssetId: string | null = null
+  }
 
-    if (thumbnailUrl) {
-      const uploaded = await uploadImageToR2(thumbnailUrl, {
-        context: "thumbnail",
-      })
-      thumbnailUrl = uploaded.url
-      thumbnailAssetId = uploaded.assetId
-    }
+  let thumbnailUrl = extractThumbnail(
+    new JSDOM(html, { url }).window.document,
+    url,
+  )
+  let thumbnailAssetId: string | null = null
 
-    const textContent = cleanArticleContent(article.textContent ?? "")
-    const excerpt = cleanArticleContent(article.excerpt ?? "")
-
-    return R.ok({
-      title: article.title ?? "Untitled",
-      content: article.content ?? "",
-      textContent,
-      excerpt,
-      thumbnailUrl,
-      thumbnailAssetId,
-      siteName: article.siteName ?? null,
+  if (thumbnailUrl) {
+    const uploaded = await uploadImageToR2(thumbnailUrl, {
+      context: "thumbnail",
     })
+    thumbnailUrl = uploaded.url
+    thumbnailAssetId = uploaded.assetId
+  }
+
+  const textContent = cleanArticleContent(article.textContent ?? "")
+  const excerpt = cleanArticleContent(article.excerpt ?? "")
+
+  return R.ok({
+    title: article.title ?? "Untitled",
+    content: article.content ?? "",
+    textContent,
+    excerpt,
+    thumbnailUrl,
+    thumbnailAssetId,
+    siteName: article.siteName ?? null,
   })
 }

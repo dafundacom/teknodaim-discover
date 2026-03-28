@@ -1,4 +1,6 @@
 import { defineMiddleware, sequence } from "astro:middleware"
+import { Result, TaggedError } from "better-result"
+
 import { hashApiKey } from "@/lib/api-keys"
 import { auth } from "@/lib/auth"
 import {
@@ -6,12 +8,26 @@ import {
   updateApiKeyLastUsed,
 } from "@/lib/db/queries/api-keys"
 
+export class SchedulerInitError extends TaggedError("SchedulerInitError")<{
+  message: string
+  cause?: unknown
+}>() {}
+
 async function initSchedulerSafe(): Promise<void> {
-  try {
-    const { initScheduler } = await import("@/lib/pipeline/scheduler")
-    await initScheduler()
-  } catch (e) {
-    console.error("Failed to initialize scheduler:", e)
+  const result = await Result.tryPromise({
+    try: async () => {
+      const { initScheduler } = await import("@/lib/pipeline/scheduler")
+      await initScheduler()
+    },
+    catch: (e) =>
+      new SchedulerInitError({
+        message: "Failed to initialize scheduler",
+        cause: e,
+      }),
+  })
+
+  if (Result.isError(result)) {
+    console.error("Failed to initialize scheduler:", result.error)
   }
 }
 
@@ -43,36 +59,48 @@ const apiKeyMiddleware = defineMiddleware(async (context, next) => {
     return next()
   }
 
-  try {
-    const keyHash = hashApiKey(apiKey)
-    const apiKeyRecord = await getApiKeyByHash(keyHash)
+  const result = await Result.tryPromise({
+    try: async () => {
+      const keyHash = hashApiKey(apiKey)
+      const apiKeyRecord = await getApiKeyByHash(keyHash)
 
-    if (!apiKeyRecord) {
-      return next()
-    }
+      if (!apiKeyRecord) {
+        return null
+      }
 
-    if (!apiKeyRecord.isActive) {
-      return next()
-    }
+      if (!apiKeyRecord.isActive) {
+        return null
+      }
 
-    const user = await auth.api.getUser({
-      query: { id: apiKeyRecord.userId },
-    })
+      const user = await auth.api.getUser({
+        query: { id: apiKeyRecord.userId },
+      })
 
-    if (!user) {
-      return next()
-    }
+      if (!user) {
+        return null
+      }
 
-    void updateApiKeyLastUsed(apiKeyRecord.id)
+      void updateApiKeyLastUsed(apiKeyRecord.id)
 
-    context.locals.user = user
-    context.locals.apiKeyAuth = true
+      return user
+    },
+    catch: (e) =>
+      new Error(
+        `API key auth error: ${e instanceof Error ? e.message : String(e)}`,
+      ),
+  })
 
-    return next()
-  } catch (error) {
-    console.error("API key auth error:", error)
+  if (Result.isError(result)) {
+    console.error("API key auth error:", result.error)
     return next()
   }
+
+  if (result.value) {
+    context.locals.user = result.value
+    context.locals.apiKeyAuth = true
+  }
+
+  return next()
 })
 
 const authGuardMiddleware = defineMiddleware((context, next) => {
