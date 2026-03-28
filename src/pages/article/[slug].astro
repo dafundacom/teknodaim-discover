@@ -130,7 +130,9 @@ const articleUrl = `${Astro.url.origin}/article/${slug}`
       <header class="mb-8">
         <div class="mb-4 flex flex-wrap gap-2">
           {categoryLinks.map((cat: { slug: string; name: string }) => (
-            <Badge variant="secondary">{cat.name}</Badge>
+            <a href={`/category/${cat.slug}`}>
+              <Badge variant="secondary">{cat.name}</Badge>
+            </a>
           ))}
         </div>
 

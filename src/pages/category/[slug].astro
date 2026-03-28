@@ -1,0 +1,176 @@
+---
+import { and, count, desc, eq, sql } from "drizzle-orm"
+import type { ArticleCardData } from "@/components/article-card.svelte"
+import ArticleFeed from "@/components/article-feed.svelte"
+import StoreInit from "@/components/store-init.svelte"
+import Layout from "@/layouts/layout.astro"
+import { db } from "@/lib/db/client"
+import { getSavedSlugsForUser } from "@/lib/db/queries"
+import {
+  articleCategoriesTable,
+  articlesTable,
+  categoriesTable,
+} from "@/lib/db/schemas"
+
+const { slug } = Astro.params
+if (!slug) return Astro.redirect("/")
+
+const category = await db.query.categoriesTable.findFirst({
+  where: eq(categoriesTable.slug, slug),
+})
+
+if (!category) return new Response(null, { status: 404 })
+
+const pageParam = Astro.url.searchParams.get("page")
+const currentPage = pageParam ? Number.parseInt(pageParam, 10) : 1
+const limit = 20
+const offset = (currentPage - 1) * limit
+
+const user = Astro.locals.user
+const savedSlugs = user ? await getSavedSlugsForUser(user.id) : []
+
+const articleIdsQuery = db
+  .select({ articleId: articleCategoriesTable.articleId })
+  .from(articleCategoriesTable)
+  .where(eq(articleCategoriesTable.categoryId, category.id))
+
+const articleIdsResult = await articleIdsQuery
+const articleIds = articleIdsResult.map((r) => r.articleId)
+
+let articles: ArticleCardData[] = []
+let total = 0
+
+if (articleIds.length > 0) {
+  const where = and(
+    eq(articlesTable.status, "published"),
+    sql`${articlesTable.id} IN (${sql.join(
+      articleIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})`,
+  )
+
+  const [articlesResult, [totalRow]] = await Promise.all([
+    db.query.articlesTable.findMany({
+      where,
+      orderBy: [desc(articlesTable.publishedAt)],
+      limit,
+      offset,
+      columns: {
+        id: true,
+        slug: true,
+        title: true,
+        summary: true,
+        thumbnailUrl: true,
+        sourceCount: true,
+        readingTimeMinutes: true,
+        publishedAt: true,
+      },
+    }),
+    db.select({ count: count() }).from(articlesTable).where(where),
+  ])
+
+  articles = articlesResult.map((a) => ({
+    ...a,
+    summary: a.summary ?? "",
+    readingTimeMinutes: a.readingTimeMinutes ?? 0,
+  }))
+  total = totalRow?.count ?? 0
+}
+
+const totalPages = Math.ceil(total / limit)
+const hasNextPage = currentPage < totalPages
+const hasPrevPage = currentPage > 1
+
+const pageTitle = `${category.name} - Discover`
+const pageDescription =
+  category.description ?? `Articles about ${category.name}`
+const canonicalUrl = `${Astro.url.origin}/category/${slug}`
+---
+
+<Layout title={pageTitle} description={pageDescription}>
+  <StoreInit
+    user={user ? { id: user.id, name: user.name, email: user.email, image: user.image ?? null, role: user.role ?? null } : null}
+    {savedSlugs}
+    client:load
+  />
+  <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div class="mb-8">
+      <div class="flex items-center gap-3">
+        {category.iconUrl && (
+          <img
+            src={category.iconUrl}
+            alt=""
+            class="h-8 w-8 rounded-lg object-cover"
+          />
+        )}
+        <h1 class="text-3xl font-bold tracking-tight text-foreground">
+          {category.name}
+        </h1>
+      </div>
+      {category.description && (
+        <p class="mt-2 text-muted-foreground">{category.description}</p>
+      )}
+    </div>
+
+    <main>
+      {articles.length > 0 ? (
+        <div class="space-y-6">
+          <ArticleFeed
+            initialArticles={articles}
+            initialTotal={total}
+            pageSize={limit}
+            client:load
+          />
+
+          {(hasPrevPage || hasNextPage) && (
+            <div class="flex items-center justify-between pt-6">
+              {hasPrevPage ? (
+                <a
+                  href={`/category/${slug}?page=${currentPage - 1}`}
+                  class="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                >
+                  ← Previous
+                </a>
+              ) : (
+                <span></span>
+              )}
+              <span class="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              {hasNextPage ? (
+                <a
+                  href={`/category/${slug}?page=${currentPage + 1}`}
+                  class="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+                >
+                  Next →
+                </a>
+              ) : (
+                <span></span>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div class="py-16 text-center">
+          <p class="text-lg font-medium text-muted-foreground">
+            No articles in this category yet
+          </p>
+          <p class="mt-2 text-sm text-muted-foreground">
+            Check back soon for {category.name.toLowerCase()} insights.
+          </p>
+          <a
+            href="/"
+            class="mt-4 inline-block rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Browse all articles
+          </a>
+        </div>
+      )}
+    </main>
+  </div>
+
+  <link rel="canonical" href={canonicalUrl} />
+  <meta property="og:title" content={pageTitle} />
+  <meta property="og:description" content={pageDescription} />
+  <meta property="og:url" content={canonicalUrl} />
+</Layout>

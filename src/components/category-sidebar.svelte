@@ -32,7 +32,7 @@ export interface CategoryItem {
   </a>
 
   {#each categories as cat}
-    <a href={`/?category=${cat.slug}`}>
+    <a href={`/category/${cat.slug}`}>
       <Button
         variant={activeSlug === cat.slug ? "secondary" : "ghost"}
         class="w-full justify-start text-sm"
