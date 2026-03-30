@@ -78,6 +78,13 @@
       "when": 1774849472214,
       "tag": "0010_wild_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1774854139579,
+      "tag": "0011_petite_reavers",
+      "breakpoints": true
     }
   ]
 }
